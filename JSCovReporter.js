@@ -1,6 +1,8 @@
 JSCovFileReporter = Backbone.View.extend({
-    initialize: function () {
-        _.bindAll(this);
+    initialize: function (options) {
+        var _this = this;
+        this.options = options;
+        _.bindAll.apply(_, [this].concat(_.filter(Object.keys(JSCovFileReporter.prototype), function(key){ return typeof _this[key] == 'function'})));
         this.open  = '<tr class="{class}"><td class="line">{line_number}</td><td class="hits">{count}</td><td class="source">';
         this.close = '</td></tr>';
 
@@ -27,9 +29,9 @@ JSCovFileReporter = Backbone.View.extend({
 
     generateOpen: function(hit_count, line_number){
         return this.substitute(this.open, {
-            'count': hit_count,
+            'count': hit_count !== void 0 ? hit_count : '',
             'line_number': line_number,
-            'class': hit_count ? 'hit' : 'miss'
+            'class': hit_count === void 0 || hit_count > 0 ? 'hit' : 'miss'
         });
     },
 
@@ -37,7 +39,7 @@ JSCovFileReporter = Backbone.View.extend({
         var thisview = this;
         var i, l, k;
 
-        var code = this.coverObject.__code;
+        var code = this.coverObject.source;
 
         // generate array of all tokens
         var codez = [];
@@ -50,61 +52,32 @@ JSCovFileReporter = Backbone.View.extend({
 
         // CoverObject has keys like "12:200" which means from char 12 to 200
         // This orders all first gaps in a list of dictionaries to ease drawing table lines
-        var gaps = Object.keys(this.coverObject);
-        gaps = _.without(gaps, '__code');
-        var first_gaps = _.map(gaps, function ( gap ) {
-            return {
-                gap: parseInt(gap.split(':')[0], 10),
-                hit_count: thisview.coverObject[gap]
-            };
-        }).sort(function (a, b) {
-            if (a['gap'] > b['gap']) return 1;
-            if (b['gap'] > a['gap']) return -1;
-            return 0;
-        });
-
-        var second_gaps = _.map(gaps, function ( gap ) {
-            return {
-                gap: parseInt(gap.split(':')[1], 10),
-                hit_count: thisview.coverObject[gap]
-            };
-        }).sort(function (a, b) {
-            if (a['gap'] > b['gap']) return 1;
-            if (b['gap'] > a['gap']) return -1;
-            return 0;
-        });
-
-
-        // If it doesn't start from 0 it's because there are comments in the beginning
-        // We add a initial gap with one hit
-        if (first_gaps[0] !== 0) {
-            first_gaps.splice(0, 0, {gap: 0, hit_count: 1});
-        }
-
+        var lines = Object.keys(this.coverObject);
+        lines = _.without(lines, 'source');
         var result = '';
         var number_trailing_whitespaces = 0;
         var trailing_whitespaces = '';
 
 
         // We will go from one gap to the next wrapping them in table lines
-        for (i=0, l = first_gaps.length; i < l; i++){
+        for (i=0, l = codez.length; i < l; i++){
 
-            var hit_count = first_gaps[i]['hit_count'];
+            var hit_count = this.coverObject[i+1];
 
-            this.total++;
-            if (hit_count) this.pass++;
-            else this.error++;
+            
+            if(hit_count !== void 0){
+              this.total++;
+              if (hit_count > 0) this.pass++;
+              else this.error++;
+            }
 
             var limit = null;
             if (i+1 >= l) {
                 limit = codez.length;
             }
-            else {
-                limit = first_gaps[i+1]['gap'];
-            }
 
             // Table line opening
-            result += this.generateOpen(hit_count, this.total);
+            result += this.generateOpen(hit_count, i);
 
             // Add trailing white space if it existed from previous line without carriage returns
             if (number_trailing_whitespaces > 0 ) {
@@ -112,9 +85,7 @@ JSCovFileReporter = Backbone.View.extend({
             }
 
             // Add lines of code without initial white spaces, and replacing conflictive chars
-            result += _.map(codez.slice(first_gaps[i]['gap'], limit), function (loc) {
-                return loc['value'];
-            }).join('').trimLeft().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            result += codez[i].value[0].replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
             // Count trailing white spaces for future line, then remove them
             var matches = result.match(/(\s+)$/);
@@ -138,7 +109,8 @@ JSCovFileReporter = Backbone.View.extend({
 
 
 JSCovReporter = Backbone.View.extend({
-    initialize: function () {
+    initialize: function (options) {
+        this.options = options;
         this.coverObject = this.options.coverObject;
 
         // Generate the report
